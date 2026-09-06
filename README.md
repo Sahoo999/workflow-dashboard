@@ -1,75 +1,363 @@
-# React + TypeScript + Vite
+<div align="center">
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+# Durable Workflow Engine Dashboard
 
-Currently, two official plugins are available:
+**Operations Control Plane for Durable Workflow Execution**
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+A focused React control plane for inspecting **workflow definitions, runs, task graphs, retries, approvals, dead-lettered work, and worker health** from one operational surface.
 
-## React Compiler
+[**🚀 Live Demo**](https://workflow-dashboard-kappa.vercel.app) · [**⚙️ Workflow Engine**](https://github.com/Sahoo999/durable-workflow-engine)
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+</div>
 
-## Expanding the ESLint configuration
+---
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+## Why this exists
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+Reliable background execution is only half the problem.
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+Once work becomes asynchronous and durable, engineers also need to answer:
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+- What is running right now?
+- Which task is blocked?
+- What failed, and how many times?
+- Is a workflow waiting for a human decision?
+- Are workers alive and sending heartbeats?
+- Which tasks were exhausted and moved to the dead-letter queue?
 
+This repository is the **observability and operations layer** for my [Durable Workflow Engine](https://github.com/Sahoo999/durable-workflow-engine).
+
+The engine owns execution.  
+This dashboard makes that execution **visible, navigable, and operable**.
+
+---
+
+## Product view
+
+The UI is intentionally built around an operator's path through a failure or execution state:
+
+```text
+Workflow
+   ↓
+Run
+   ↓
+Task graph
+   ↓
+Task state
+   ↓
+Attempts / retries
+   ↓
+Approval or DLQ
+   ↓
+Worker health
 ```
 
-You can also install [eslint-plugin-react-x](https://npmx.dev/package/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://npmx.dev/package/eslint-plugin-react-dom) for React-specific lint rules:
+Instead of exposing raw JSON or asking an engineer to piece together state from logs, the dashboard turns the engine's durable state into a small operational control plane.
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+---
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+## Core capabilities
 
+| Area | What you can see / do |
+|---|---|
+| **Workflows** | Browse registered workflows, inspect the latest version, definition, tasks, and dependencies |
+| **Runs** | Open individual executions and inspect their current lifecycle state |
+| **Workflow graph** | Visualize task dependencies and execution state with React Flow |
+| **Task attempts** | Inspect execution history across retries and repeated attempts |
+| **Approvals** | Surface human-in-the-loop work and approve or reject pending tasks |
+| **Dead Letter Queue** | Investigate tasks that permanently failed after exhausting retries |
+| **Workers** | Monitor worker identity, state, hostname, heartbeat, and start time |
+| **API connectivity** | Surface backend availability and fetch failures directly in the control plane |
+
+---
+
+## The architecture
+
+The frontend is deliberately kept separate from the execution engine.
+
+```text
+                    ┌──────────────────────────────┐
+                    │      React Dashboard         │
+                    │                              │
+                    │  Workflows                   │
+                    │  Runs / Tasks                │
+                    │  Graphs                      │
+                    │  Approvals                   │
+                    │  Dead Letter Queue            │
+                    │  Workers                      │
+                    └──────────────┬───────────────┘
+                                   │
+                              REST / HTTPS
+                                   │
+                                   ▼
+                    ┌──────────────────────────────┐
+                    │    Durable Workflow Engine   │
+                    │            Fastify            │
+                    └──────────────┬───────────────┘
+                                   │
+                     ┌─────────────┴─────────────┐
+                     │                           │
+                     ▼                           ▼
+              ┌──────────────┐           ┌──────────────┐
+              │  PostgreSQL  │           │ Redis/BullMQ │
+              └──────────────┘           └──────┬───────┘
+                                                │
+                                                ▼
+                                         ┌──────────────┐
+                                         │   Workers    │
+                                         └──────────────┘
 ```
+
+### Separation of responsibilities
+
+**Dashboard**
+- Reads operational state
+- Visualizes execution
+- Surfaces failures and waiting states
+- Provides operator actions for approvals/recovery workflows
+
+**Workflow Engine**
+- Persists workflow and task state
+- Schedules dependency-aware work
+- Queues tasks
+- Executes tasks on workers
+- Handles retries, heartbeats, fencing, recovery, approvals, and DLQ behavior
+
+This boundary keeps the UI replaceable without coupling it to the execution runtime.
+
+---
+
+## A concrete execution story
+
+Imagine an order workflow:
+
+```text
+Order Created
+      │
+      ▼
+Validate Order
+      │
+      ▼
+Reserve Inventory
+      │
+      ▼
+Request Approval
+      │
+      ▼
+Generate Invoice
+```
+
+The dashboard lets an operator move through the lifecycle of one run:
+
+**1. Find the workflow**  
+Open the workflow definition and confirm the task graph.
+
+**2. Open a run**  
+Inspect the run ID and current overall state.
+
+**3. Read the graph**  
+See task dependencies and which nodes have completed, are pending, or are blocked.
+
+**4. Inspect attempts**  
+Understand whether a task failed once, retried, or exhausted its retry policy.
+
+**5. Handle human intervention**  
+Approve or reject a pending approval without leaving the control plane.
+
+**6. Investigate permanent failures**  
+Use the dead-letter queue as the operational boundary for work that needs investigation or replay.
+
+**7. Check workers**  
+Confirm that the execution layer is alive and heartbeating when progress is delayed.
+
+---
+
+## Engineering choices
+
+### React + TypeScript
+
+The dashboard is written in TypeScript so API models, component contracts, and application state remain explicit instead of becoming a collection of untyped JSON responses.
+
+### React Router
+
+The UI is organized around operational resources rather than a single page:
+
+```text
+/workflows
+/workflows/:name
+/runs/:id
+/approvals
+/dead-letter
+/workers
+```
+
+This keeps navigation predictable as the control plane grows.
+
+### React Flow
+
+Workflow execution is naturally a graph problem. React Flow is used to render task nodes and dependency edges so the operator can understand execution topology at a glance.
+
+### Environment-driven API configuration
+
+The dashboard does not hard-code the production backend into the application.
+
+```env
+VITE_API_URL=http://localhost:3000
+```
+
+Local development can point at the local engine, while production uses:
+
+```env
+VITE_API_URL=https://durable-workflow-engine-production.up.railway.app
+```
+
+---
+
+## Technology
+
+```text
+Frontend
+├── React
+├── TypeScript
+├── Vite
+├── React Router
+└── React Flow
+
+Backend integration
+└── Fastify REST API
+
+Production
+├── Vercel      → Dashboard
+└── Railway     → Workflow Engine / PostgreSQL / Redis / Worker
+```
+
+---
+
+## Project structure
+
+```text
+src/
+├── api/
+│   └── client.ts              # API boundary
+├── components/
+│   ├── Layout.tsx             # Application shell / navigation
+│   ├── RunGraph.tsx            # Workflow execution graph
+│   └── TaskAttempts.tsx        # Attempt history
+├── pages/
+│   ├── WorkflowsPage.tsx
+│   ├── WorkflowPage.tsx
+│   ├── RunPage.tsx
+│   ├── ApprovalsPage.tsx
+│   ├── DeadLetterPage.tsx
+│   └── WorkersPage.tsx
+├── types/
+├── App.tsx
+└── main.tsx
+```
+
+---
+
+## Run locally
+
+### Prerequisites
+
+- Node.js
+- The [Durable Workflow Engine](https://github.com/Sahoo999/durable-workflow-engine) running locally
+
+### Install
+
+```bash
+git clone https://github.com/Sahoo999/workflow-dashboard.git
+cd workflow-dashboard
+npm install
+```
+
+### Configure the backend URL
+
+Create `.env`:
+
+```env
+VITE_API_URL=http://localhost:3000
+```
+
+### Start
+
+```bash
+npm run dev
+```
+
+### Production build
+
+```bash
+npm run build
+```
+
+---
+
+## Production
+
+The dashboard is deployed as a static React application on Vercel and connects to the separately deployed workflow engine on Railway.
+
+```text
+Vercel
+  └── workflow-dashboard
+          │
+          │ HTTPS
+          ▼
+Railway
+  └── durable-workflow-engine
+       ├── Fastify API
+       ├── PostgreSQL
+       ├── Redis
+       └── Worker
+```
+
+### Live
+
+**Dashboard:**  
+https://workflow-dashboard-kappa.vercel.app
+
+**Engine repository:**  
+https://github.com/Sahoo999/durable-workflow-engine
+
+---
+
+## What this project demonstrates
+
+This repository is intentionally more than a visual frontend exercise.
+
+It demonstrates how to build a control plane around an asynchronous system where the important UI state is derived from:
+
+- durable workflow state
+- task state transitions
+- dependency relationships
+- retry attempts
+- human approval state
+- dead-letter state
+- worker liveness
+
+The interesting part is not just rendering the data. It is **turning distributed execution state into something an engineer can reason about quickly**.
+
+---
+
+## Related repository
+
+### Durable Workflow Engine
+
+The backend execution system lives in a separate repository:
+
+**https://github.com/Sahoo999/durable-workflow-engine**
+
+That repository contains the core runtime for durable workflow execution, including task orchestration, Redis/BullMQ dispatch, PostgreSQL persistence, worker execution, retries, recovery, approvals, dead-letter handling, and observability.
+
+This repository is the **control plane that sits on top of it**.
+
+---
+
+<div align="center">
+
+### Built for engineers who need to see the system, not just run it.
+
+**Live Demo → https://workflow-dashboard-kappa.vercel.app**
+
+</div>
