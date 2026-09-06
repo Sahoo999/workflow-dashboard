@@ -1,331 +1,135 @@
 <div align="center">
 
-# Durable Workflow Engine Dashboard
+# Durable Workflow Dashboard
 
-### Operations Control Plane for a Durable Workflow Engine
+**Operations Control Plane for Durable Workflow Execution**
 
-A production-style React dashboard for observing workflow definitions, executions, task dependencies, worker health, human approvals, retries, and dead-lettered tasks from a single operational interface.
+A focused React control plane for inspecting **workflow definitions, runs, task graphs, retries, approvals, dead-lettered work, and worker health** from one operational surface.
 
-**Live Demo:** https://workflow-dashboard-kappa.vercel.app
-
-**Backend Engine:** https://github.com/Sahoo999/durable-workflow-engine
+[**🚀 Live Demo**](https://workflow-dashboard-kappa.vercel.app) · [**⚙️ Workflow Engine**](https://github.com/Sahoo999/durable-workflow-engine)
 
 </div>
 
 ---
 
-## Overview
+## Why this exists
 
-The **Durable Workflow Engine Dashboard** is the visual control plane for my [Durable Workflow Engine](https://github.com/Sahoo999/durable-workflow-engine).
+Reliable background execution is only half the problem.
 
-The engine is responsible for executing workflow tasks reliably in the background. This dashboard is responsible for making that execution **observable and manageable**.
+Once work becomes asynchronous and durable, engineers also need to answer:
 
-Instead of exposing raw API responses or forcing an operator to inspect logs, the dashboard presents the system as an operational interface:
+- What is running right now?
+- Which task is blocked?
+- What failed, and how many times?
+- Is a workflow waiting for a human decision?
+- Are workers alive and sending heartbeats?
+- Which tasks were exhausted and moved to the dead-letter queue?
 
-- Workflow definitions and versions
-- Workflow runs and execution status
-- Dependency-aware task graphs
-- Individual task states
-- Task attempts and execution history
-- Pending human approvals
-- Dead-letter queue entries
-- Worker registration and heartbeat state
-- API/engine availability
+This repository is the **observability and operations layer** for my [Durable Workflow Engine](https://github.com/Sahoo999/durable-workflow-engine).
 
-The result is a UI that behaves more like an internal **workflow operations console** than a typical CRUD application.
+The engine owns execution.  
+This dashboard makes that execution **visible, navigable, and operable**.
 
 ---
 
-## Why I Built It
+## Product view
 
-Background workflows are easy to start and difficult to operate reliably.
-
-Once a workflow can contain multiple dependent tasks, retries, worker failures, approval gates, and permanently failed jobs, an engineering team needs more than an API. They need a clear way to answer questions such as:
-
-> What is running right now?
-
-> Which task is blocking the workflow?
-
-> Did a task fail or is it waiting for a retry?
-
-> Which workers are alive?
-
-> Which workflows are waiting for human approval?
-
-> Which tasks ended up in the dead-letter queue?
-
-I built this dashboard to provide that operational visibility while keeping the workflow engine itself independent from the presentation layer.
-
----
-
-## What the Dashboard Does
-
-### 1. Workflow Overview
-
-The main workflow screen presents registered workflows as an operational inventory.
-
-Each workflow can be opened to inspect:
-
-- Latest workflow version
-- Workflow definition
-- Configured tasks
-- Dependencies
-- Available workflow runs
-
-This gives an operator a fast path from **workflow → execution**.
-
-### 2. Workflow Run Monitoring
-
-A workflow run has its own execution view.
-
-The run page shows:
-
-- Run ID
-- Current workflow status
-- Task execution graph
-- Task-level states
-- Dependency relationships
-- Execution details
-
-The graph gives a visual representation of how work moves through the workflow instead of presenting the execution as a flat table.
-
-Example:
+The UI is intentionally built around an operator's path through a failure or execution state:
 
 ```text
-A ───────► B ───────► C
-         dependency
+Workflow
+   ↓
+Run
+   ↓
+Task graph
+   ↓
+Task state
+   ↓
+Attempts / retries
+   ↓
+Approval or DLQ
+   ↓
+Worker health
 ```
 
-### 3. Task Attempts
-
-Tasks can be executed more than once because of retry policies or recovery.
-
-The dashboard exposes task-attempt information so an operator can understand execution history rather than seeing only the final task status.
-
-### 4. Human-in-the-Loop Approvals
-
-Some workflows should pause until a person makes a decision.
-
-The **Pending Approvals** screen surfaces waiting tasks and provides operational actions for:
-
-- Approve
-- Reject
-
-This connects the human decision directly to the workflow execution lifecycle.
-
-### 5. Dead Letter Queue
-
-Tasks that permanently fail after exhausting their retry policy can be moved to a dead-letter queue.
-
-The dashboard provides a dedicated **Dead Letter Queue** view for investigating these failures and supporting replay/recovery workflows.
-
-### 6. Worker Monitoring
-
-The Workers screen shows the state of the worker pool, including:
-
-- Worker identity
-- Hostname
-- Active/offline state
-- Last heartbeat
-- Start time
-
-This gives operators visibility into the infrastructure responsible for executing queued tasks.
+Instead of exposing raw JSON or asking an engineer to piece together state from logs, the dashboard turns the engine's durable state into a small operational control plane.
 
 ---
 
-## Architecture
+## Core capabilities
 
-The dashboard is intentionally separated from the workflow engine.
-
-```text
-                         ┌─────────────────────────────┐
-                         │      React Dashboard        │
-                         │                             │
-                         │  Workflows                  │
-                         │  Runs                       │
-                         │  Tasks                      │
-                         │  Approvals                  │
-                         │  Dead Letter Queue          │
-                         │  Workers                    │
-                         └──────────────┬──────────────┘
-                                        │
-                                     HTTPS API
-                                        │
-                                        ▼
-                         ┌─────────────────────────────┐
-                         │    Durable Workflow Engine  │
-                         │          Fastify             │
-                         └──────────────┬──────────────┘
-                                        │
-                          ┌─────────────┴─────────────┐
-                          │                           │
-                          ▼                           ▼
-                   ┌───────────────┐          ┌───────────────┐
-                   │  PostgreSQL   │          │ Redis / Queue │
-                   └───────────────┘          └───────┬───────┘
-                                                      │
-                                                      ▼
-                                               ┌──────────────┐
-                                               │    Workers   │
-                                               └──────────────┘
-```
-
-The dashboard does not execute workflow tasks itself. It consumes the engine's API and turns durable execution state into a usable operator experience.
-
----
-
-## Technology Stack
-
-| Technology | Purpose |
+| Area | What you can see / do |
 |---|---|
-| **React** | UI and component architecture |
-| **TypeScript** | Type-safe frontend development |
-| **Vite** | Development and production build tooling |
-| **React Router** | Client-side routing |
-| **React Flow** | Workflow/run graph visualization |
-| **Fetch API** | Communication with the workflow engine API |
-| **Vercel** | Production frontend deployment |
-
-The backend engine is a separate application built around Fastify, PostgreSQL, Redis/BullMQ, workers, durable task state, retries, recovery, approvals, and observability.
+| **Workflows** | Browse registered workflows, inspect the latest version, definition, tasks, and dependencies |
+| **Runs** | Open individual executions and inspect their current lifecycle state |
+| **Workflow graph** | Visualize task dependencies and execution state with React Flow |
+| **Task attempts** | Inspect execution history across retries and repeated attempts |
+| **Approvals** | Surface human-in-the-loop work and approve or reject pending tasks |
+| **Dead Letter Queue** | Investigate tasks that permanently failed after exhausting retries |
+| **Workers** | Monitor worker identity, state, hostname, heartbeat, and start time |
+| **API connectivity** | Surface backend availability and fetch failures directly in the control plane |
 
 ---
 
-## Project Structure
+## The architecture
+
+The frontend is deliberately kept separate from the execution engine.
 
 ```text
-workflow-dashboard/
-├── public/
-├── src/
-│   ├── api/
-│   │   └── client.ts
-│   ├── components/
-│   │   ├── Layout.tsx
-│   │   ├── RunGraph.tsx
-│   │   └── TaskAttempts.tsx
-│   ├── pages/
-│   │   ├── WorkflowsPage.tsx
-│   │   ├── WorkflowPage.tsx
-│   │   ├── RunPage.tsx
-│   │   ├── ApprovalsPage.tsx
-│   │   ├── DeadLetterPage.tsx
-│   │   └── WorkersPage.tsx
-│   ├── types/
-│   ├── App.tsx
-│   └── main.tsx
-├── public/
-├── package.json
-├── vite.config.ts
-├── tsconfig.json
-└── README.md
+                    ┌──────────────────────────────┐
+                    │      React Dashboard         │
+                    │                              │
+                    │  Workflows                   │
+                    │  Runs / Tasks                │
+                    │  Graphs                      │
+                    │  Approvals                   │
+                    │  Dead Letter Queue            │
+                    │  Workers                      │
+                    └──────────────┬───────────────┘
+                                   │
+                              REST / HTTPS
+                                   │
+                                   ▼
+                    ┌──────────────────────────────┐
+                    │    Durable Workflow Engine   │
+                    │            Fastify            │
+                    └──────────────┬───────────────┘
+                                   │
+                     ┌─────────────┴─────────────┐
+                     │                           │
+                     ▼                           ▼
+              ┌──────────────┐           ┌──────────────┐
+              │  PostgreSQL  │           │ Redis/BullMQ │
+              └──────────────┘           └──────┬───────┘
+                                                │
+                                                ▼
+                                         ┌──────────────┐
+                                         │   Workers    │
+                                         └──────────────┘
 ```
+
+### Separation of responsibilities
+
+**Dashboard**
+- Reads operational state
+- Visualizes execution
+- Surfaces failures and waiting states
+- Provides operator actions for approvals/recovery workflows
+
+**Workflow Engine**
+- Persists workflow and task state
+- Schedules dependency-aware work
+- Queues tasks
+- Executes tasks on workers
+- Handles retries, heartbeats, fencing, recovery, approvals, and DLQ behavior
+
+This boundary keeps the UI replaceable without coupling it to the execution runtime.
 
 ---
 
-## Frontend ↔ Backend Integration
+## A concrete execution story
 
-The frontend uses an environment-controlled API endpoint so local development and production can use the same application code.
-
-```text
-Local development
-VITE_API_URL → http://localhost:3000
-
-Production
-VITE_API_URL → https://durable-workflow-engine-production.up.railway.app
-```
-
-This keeps the dashboard independent from a hard-coded local backend.
-
----
-
-## Production Deployment
-
-The dashboard is deployed on **Vercel**.
-
-The workflow engine is deployed separately on **Railway**, together with PostgreSQL, Redis, and a background worker.
-
-```text
-Vercel
-└── React Dashboard
-
-Railway
-├── Fastify API
-├── PostgreSQL
-├── Redis
-└── Workflow Worker
-```
-
-This separation mirrors how a control plane and a background execution system can be deployed independently in a real engineering environment.
-
----
-
-## Running Locally
-
-### 1. Clone
-
-```bash
-git clone https://github.com/Sahoo999/workflow-dashboard.git
-cd workflow-dashboard
-```
-
-### 2. Install dependencies
-
-```bash
-npm install
-```
-
-### 3. Configure the API
-
-Create `.env`:
-
-```env
-VITE_API_URL=http://localhost:3000
-```
-
-The backend engine must be running separately.
-
-### 4. Start the dashboard
-
-```bash
-npm run dev
-```
-
-### 5. Build for production
-
-```bash
-npm run build
-```
-
----
-
-## Typical Operator Workflow
-
-```text
-1. Open Workflows
-        ↓
-2. Select a workflow
-        ↓
-3. Inspect its latest definition
-        ↓
-4. Open a workflow run
-        ↓
-5. Inspect the task graph
-        ↓
-6. Investigate task attempts/status
-        ↓
-7. Resolve approvals when required
-        ↓
-8. Inspect permanently failed work in the DLQ
-        ↓
-9. Check worker health when execution is delayed
-```
-
-The dashboard is designed around **operational investigation**, not simply data display.
-
----
-
-## Example Operational Scenario
-
-Imagine a workflow:
+Imagine an order workflow:
 
 ```text
 Order Created
@@ -343,83 +147,217 @@ Request Approval
 Generate Invoice
 ```
 
-An operator can use the dashboard to:
+The dashboard lets an operator move through the lifecycle of one run:
 
-1. Find the workflow.
-2. Open a specific run.
-3. See which task is currently blocked.
-4. Inspect the dependency chain.
-5. Review task attempts.
-6. Approve or reject a human-in-the-loop step.
-7. Investigate permanently failed tasks in the DLQ.
-8. Check worker availability when execution stops progressing.
+**1. Find the workflow**  
+Open the workflow definition and confirm the task graph.
 
----
+**2. Open a run**  
+Inspect the run ID and current overall state.
 
-## Design Goals
+**3. Read the graph**  
+See task dependencies and which nodes have completed, are pending, or are blocked.
 
-### Operational clarity
-Important state should be visible without reading raw logs.
+**4. Inspect attempts**  
+Understand whether a task failed once, retried, or exhausted its retry policy.
 
-### Separation of concerns
-The frontend is a control plane. The backend remains responsible for execution, persistence, queues, retries, recovery, and worker coordination.
+**5. Handle human intervention**  
+Approve or reject a pending approval without leaving the control plane.
 
-### Failure visibility
-Failures are first-class operational states, not hidden errors.
+**6. Investigate permanent failures**  
+Use the dead-letter queue as the operational boundary for work that needs investigation or replay.
 
-### Fast investigation
-Operators should be able to move quickly from a workflow to a run, task, attempt, worker, approval, or dead-letter entry.
-
-### Production-oriented presentation
-The interface is designed to resemble an internal engineering operations console rather than a generic demo CRUD interface.
+**7. Check workers**  
+Confirm that the execution layer is alive and heartbeating when progress is delayed.
 
 ---
 
-## Related Project
+## Engineering choices
 
-This repository is the frontend/control-plane companion to:
+### React + TypeScript
 
-**Durable Workflow Engine**  
+The dashboard is written in TypeScript so API models, component contracts, and application state remain explicit instead of becoming a collection of untyped JSON responses.
+
+### React Router
+
+The UI is organized around operational resources rather than a single page:
+
+```text
+/workflows
+/workflows/:name
+/runs/:id
+/approvals
+/dead-letter
+/workers
+```
+
+This keeps navigation predictable as the control plane grows.
+
+### React Flow
+
+Workflow execution is naturally a graph problem. React Flow is used to render task nodes and dependency edges so the operator can understand execution topology at a glance.
+
+### Environment-driven API configuration
+
+The dashboard does not hard-code the production backend into the application.
+
+```env
+VITE_API_URL=http://localhost:3000
+```
+
+Local development can point at the local engine, while production uses:
+
+```env
+VITE_API_URL=https://durable-workflow-engine-production.up.railway.app
+```
+
+---
+
+## Technology
+
+```text
+Frontend
+├── React
+├── TypeScript
+├── Vite
+├── React Router
+└── React Flow
+
+Backend integration
+└── Fastify REST API
+
+Production
+├── Vercel      → Dashboard
+└── Railway     → Workflow Engine / PostgreSQL / Redis / Worker
+```
+
+---
+
+## Project structure
+
+```text
+src/
+├── api/
+│   └── client.ts              # API boundary
+├── components/
+│   ├── Layout.tsx             # Application shell / navigation
+│   ├── RunGraph.tsx            # Workflow execution graph
+│   └── TaskAttempts.tsx        # Attempt history
+├── pages/
+│   ├── WorkflowsPage.tsx
+│   ├── WorkflowPage.tsx
+│   ├── RunPage.tsx
+│   ├── ApprovalsPage.tsx
+│   ├── DeadLetterPage.tsx
+│   └── WorkersPage.tsx
+├── types/
+├── App.tsx
+└── main.tsx
+```
+
+---
+
+## Run locally
+
+### Prerequisites
+
+- Node.js
+- The [Durable Workflow Engine](https://github.com/Sahoo999/durable-workflow-engine) running locally
+
+### Install
+
+```bash
+git clone https://github.com/Sahoo999/workflow-dashboard.git
+cd workflow-dashboard
+npm install
+```
+
+### Configure the backend URL
+
+Create `.env`:
+
+```env
+VITE_API_URL=http://localhost:3000
+```
+
+### Start
+
+```bash
+npm run dev
+```
+
+### Production build
+
+```bash
+npm run build
+```
+
+---
+
+## Production
+
+The dashboard is deployed as a static React application on Vercel and connects to the separately deployed workflow engine on Railway.
+
+```text
+Vercel
+  └── workflow-dashboard
+          │
+          │ HTTPS
+          ▼
+Railway
+  └── durable-workflow-engine
+       ├── Fastify API
+       ├── PostgreSQL
+       ├── Redis
+       └── Worker
+```
+
+### Live
+
+**Dashboard:**  
+https://workflow-dashboard-kappa.vercel.app
+
+**Engine repository:**  
 https://github.com/Sahoo999/durable-workflow-engine
 
-The backend repository contains the core execution system, including durable workflow state, task scheduling, retries, worker coordination, approvals, dead-letter handling, and observability.
+---
+
+## What this project demonstrates
+
+This repository is intentionally more than a visual frontend exercise.
+
+It demonstrates how to build a control plane around an asynchronous system where the important UI state is derived from:
+
+- durable workflow state
+- task state transitions
+- dependency relationships
+- retry attempts
+- human approval state
+- dead-letter state
+- worker liveness
+
+The interesting part is not just rendering the data. It is **turning distributed execution state into something an engineer can reason about quickly**.
 
 ---
 
-## Live Demo
+## Related repository
+
+### Durable Workflow Engine
+
+The backend execution system lives in a separate repository:
+
+**https://github.com/Sahoo999/durable-workflow-engine**
+
+That repository contains the core runtime for durable workflow execution, including task orchestration, Redis/BullMQ dispatch, PostgreSQL persistence, worker execution, retries, recovery, approvals, dead-letter handling, and observability.
+
+This repository is the **control plane that sits on top of it**.
+
+---
 
 <div align="center">
 
-### 🚀 Try the Dashboard
+### Built for engineers who need to see the system, not just run it.
 
-**https://workflow-dashboard-kappa.vercel.app**
-
-</div>
-
----
-
-## Project Status
-
-**Option A production deployment complete.**
-
-Current deployment:
-
-- React dashboard → Vercel
-- Fastify API → Railway
-- PostgreSQL → Railway
-- Redis → Railway
-- Background worker → Railway
-- Production frontend-to-API configuration
-- CI checks in the backend repository
-
----
-
-## Author
-
-<div align="center">
-
-**Sahoo999**
-
-Built from scratch as a practical exploration of durable workflow execution, asynchronous job processing, failure recovery, and operational tooling.
+**Live Demo → https://workflow-dashboard-kappa.vercel.app**
 
 </div>
