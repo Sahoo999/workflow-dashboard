@@ -1,6 +1,6 @@
 <div align="center">
 
-# Durable Workflow Dashboard
+# Durable Workflow Engine Dashboard
 
 **Operations Control Plane for Durable Workflow Execution**
 
